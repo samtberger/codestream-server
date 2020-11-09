@@ -19,8 +19,8 @@
 	"adminServer": {
 		"defaultEnv": {},
 		"pdop": {
-			"port": 8080,
-			"securePort": 8443
+			"port": 8888,
+			"securePort": 4430
 		}
 	},
 	"apiServer": {
@@ -38,9 +38,9 @@
 			"dontWantAWS": true,
 			"helpIsAvailable": true,
 			"ignoreHttps": true,
-			"port": 80,
+			"port": 8080,
 			"publicApiUrl": "http://${CSSVC_ENV}.codestream.us",
-			"securePort": 443
+			"securePort": 8443
 		}
 	},
 	"broadcastEngine": {
