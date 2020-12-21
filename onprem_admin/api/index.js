@@ -1,7 +1,7 @@
 'use strict';
 
 import express from 'express';
-import { Logger, MongoStructuredConfig } from '../config/GlobalData';
+import { Logger, MongoStructuredConfig } from '../config/globalData';
 
 const ApiRouter = express.Router();
 
