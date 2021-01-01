@@ -47,8 +47,7 @@ if not build:
 if args.action == 'prep':
 	build.prep()                              # set teamcity variables / parameters
 elif args.action == 'build':
-	print("there's nothing to build")
-	# build.build()                             # complete build so services can be started
+	build.build()                             # complete build so services can be started
 elif args.action == 'citest':
 	print("there's nothing to test")
 	# build.citest()                            # run the continuous integration test suite
