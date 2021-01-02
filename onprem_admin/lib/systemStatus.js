@@ -1,6 +1,7 @@
 
-import { timingSafeEqual } from 'crypto';
-import Fs, { watch } from 'fs';
+// import { timingSafeEqual } from 'crypto';
+// import Fs, { watch } from 'fs';
+import Fs from 'fs';
 import Hjson from 'hjson';
 import { worstStatus, SystemStatuses } from '../src/store/actions/status';
 
@@ -24,6 +25,8 @@ class systemStatus {
 	}
 
 	rollUpStatuses() {
+		// get the individual statuses from all the watchers and aggregate them into one
+		// overall status for the system being the worst status of all watchers
 		this.logger.debug('rollUpStatuses');
 		let probWatchers = 0;
 		let newSystemStatus = SystemStatuses.ok;
@@ -37,37 +40,46 @@ class systemStatus {
 			}
 			newSystemStatus = worstStatus(newSystemStatus, watcher.status);
 		});
+		const newSystemStatusMsg = !probWatchers ? '' : `${probWatchers} of ${numWatchers} watchers have a problem`;
+		if (newSystemStatus !== this.systemStatus || newSystemStatusMsg !== this.systemStatusMsg) {
+			this.logger.info(`systemStatus CHANGED: ${newSystemStatus} - ${newSystemStatusMsg}`);
+		}
 		this.systemStatus = newSystemStatus;
-		this.systemStatusMsg = !probWatchers ? '' : `${probWatchers} of ${numWatchers} watchers have problems`;
-		this.logger.log(`systemStatus: ${this.systemStatus} - ${this.systemStatusMsg}`);
+		this.systemStatusMsg = newSystemStatusMsg;
+		this.logger.debug(`systemStatus: ${this.systemStatus} - ${this.systemStatusMsg}`);
 	}
 
 	watchFile(watcherId) {
-		console.log(`watching ${watcherId}`);
+		// the file watcher reads its data from a json file with the properties
+		// 'status' and 'statusMsg'
+		this.logger.debug(`watching ${watcherId}`);
 		const watcher = this.watchers[watcherId];
-		watcher.lastCheck = Date.now();
+		const newWatchData = { lastCheck: Date.now() };
 		if (Fs.existsSync(watcher.name)) {
 			const data = Hjson.parse(Fs.readFileSync(watcher.name, 'utf8'));
-			watcher.status = data.status;
-			watcher.statusMsg = data.statusMsg || '';
+			newWatchData.status = data.status;
+			newWatchData.statusMsg = data.statusMsg || '';
 		}
 		else {
-			watcher.status = SystemStatuses.pending;
-			watcher.statusMsg = `watch file ${watcher.name} does not exist`;
+			newWatchData.status = SystemStatuses.pending;
+			newWatchData.statusMsg = `watch file ${watcher.name} does not exist`;
 		}
-		console.log(`watchingFile(${watcher.name}). Status: ${watcher.status}`)
-		console.log(`status msg: ${watcher.statusMsg}`);
+		this.logger.debug(`watchingFile(${watcher.name}). status: ${newWatchData.status}. statusMsg: ${newWatchData.statusMsg}`);
+		if (watcher.status !== newWatchData.status || watcher.statusMsg !== newWatchData.statusMsg) {
+			this.logger.info(`watchingFile(${watcher.name}) CHANGED. time: ${newWatchData.lastCheck}. status: ${newWatchData.status}. statusMsg: ${newWatchData.statusMsg}`);
+		}
+		Object.assign(watcher, newWatchData);
 		this.rollUpStatuses();
 	}
 
 	start() {
-		console.log('system status monitor is starting up...');
-		console.log('this.watchers -', this.watchers);
+		this.logger.info('system status monitor is starting up...');
+		this.logger.info('this.watchers -', this.watchers);
 		Object.keys(this.watchers).forEach(watcherId => {
-			console.log(`watcher id ${watcherId}`);
+			this.logger.info(`watcher id ${watcherId}`);
 			switch (this.watchers[watcherId].type) {
 				case 'file':
-					console.log('case file');
+					this.logger.info('case file');
 					this.watchers[watcherId].intervalTimer = setInterval(() => {
 						this.watchFile(watcherId);
 					}, WatchInterval-1000);
@@ -79,22 +91,22 @@ class systemStatus {
 	}
 
 	stop() {
-		console.log('system status monitor is shutting down...');
+		this.logger.info('system status monitor is shutting down...');
 		Object.keys(this.watchers).forEach((watcherId) => {
 			const watcher = this.watchers[watcherId];
 			if (watcher.intervalTimer) {
-				console.log(`clearing watcher id ${watcherId}`);
+				this.logger.info(`clearing watcher id ${watcherId}`);
 				clearInterval(intervalTimer);
 				delete watcher.intervalTimer;
 			}
 		});
-
 	}
 }
 
 const systemStatusFactory = (options) => {
+	const logger = options.logger || console;
 	const statusMonitor = new systemStatus(options);
-	console.log('sysstat fact:', statusMonitor.systemStatus);
+	logger.info('sysstat fact:', statusMonitor.systemStatus);
 	statusMonitor.start();
 	return statusMonitor;
 }

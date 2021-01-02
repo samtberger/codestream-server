@@ -102,7 +102,7 @@ ExpressServer.get('*', (req, res) => res.send(`bad url: ${req.url}`));
 		GlobalData.Logger.error('The admin server is disabled in the config. Good bye.');
 		process.exit(1);
 	}
-	GlobalData.Installation = await OnPremSupportData();
+	GlobalData.Installation = await OnPremSupportData(GlobalData.Logger);
 	// this would not be needed if the admin config referred the mongo database where the config is stored
 	const adminConfigIsMongo = false;
 	if (adminConfigIsMongo) {
@@ -118,31 +118,31 @@ ExpressServer.get('*', (req, res) => res.send(`bad url: ${req.url}`));
 	GlobalData.SystemStatusMonitor = systemStatusFactory({ logger: GlobalData.Logger });
 	// console.log('admin-server(GlobalData)', GlobalData);
 
-	// setup socket.io serverm listening for connections and emiting system
+	// setup socket.io server listening for connections and emiting system
 	// status updates for a heartbeat
 	const httpServer = http.createServer(ExpressServer);
 	const io = socketIo(httpServer);
 	let statusHeartBeat;
 	io.on('connection', (socket) => {
-		console.log('New client connected');
+		GlobalData.Logger.info('New client connected');
 		if (statusHeartBeat) {
 			clearInterval(statusHeartBeat);
 		}
 		statusHeartBeat = setInterval(function () {
-			console.log('emitting systemStatus');
+			GlobalData.Logger.debug(`emitting systemStatus ${GlobalData.SystemStatusMonitor.systemStatus}`);
 			socket.emit('systemStatus', {
 				status: GlobalData.SystemStatusMonitor.systemStatus,
 				message: GlobalData.SystemStatusMonitor.systemStatusMsg,
 			});
-		}, 60000);
+		}, 30000);
 		socket.on('disconnect', () => {
 			clearInterval(statusHeartBeat);
-			console.log('Client disconnected');
+			GlobalData.Logger.info('Client disconnected');
 		});
 	});
 
 	// and away we go!
 	httpServer.listen(Config.adminServer.port, () => {
-		console.info(`express server listening on port ${Config.adminServer.port}`);
+		GlobalData.Logger.info(`express server listening on port ${Config.adminServer.port}`);
 	});
 })();

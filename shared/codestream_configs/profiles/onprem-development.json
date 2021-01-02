@@ -13,7 +13,7 @@
 //   - Queuing:        rabbitMQ via docker
 //         mac:             docker run -d -P --name csrabbitmq teamcodestream/rabbitmq-onprem:0.0.0
 //         remote-linux:    docker run -d -P --network="host" --name csrabbitmq teamcodestream/rabbitmq-onprem:0.0.0
-//   - Outbound mail:  NodeMailer/smtp (via your codestream gmail account)
+//   - Outbound mail:  codestream mail relay
 
 {
 	"adminServer": {
@@ -204,8 +204,12 @@
 			"installationId": "00000000-1111-2222-3333-444444444444",
 			"runTimeEnvironment": "onprem"
 		},
-		"local": {
+		"dev": {
 			"installationId": "00000000-1111-2222-3333-444444444444"
+		},
+		"local": {
+			"installationId": "00000000-1111-2222-3333-444444444444",
+			"runTimeEnvironment": "local"
 		}
 	},
 	"sharedSecrets": {
