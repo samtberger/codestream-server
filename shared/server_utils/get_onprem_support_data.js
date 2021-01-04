@@ -1,6 +1,8 @@
 
 'use strict';
 
+const hjson = require('hjson');
+
 // Load OnPrem support data
 
 // This data describes properties of the installation (docker based, asset based,
@@ -19,10 +21,14 @@ const fs = require('fs');
 // const { integrationStatuses } = require('../../onprem_admin/src/store/actions/presentation');
 
 function getProductType(logger) {
-	const onPremInstallationDirectory = process.env.CSSVC_ONPREM_INSTALL_DATA || '/opt/config'
+	let onPremInstallationDirectory = process.env.CSSVC_ONPREM_INSTALL_DATA || '/opt/config'
 	let productType;
 	if (!fs.existsSync(onPremInstallationDirectory)) {
-		logger.error(`installation directory ${onPremInstallationDirectory} does not exist`);
+		console.log(`${onPremInstallationDirectory} does not exist. Falling back to etc/onprem-installation-data with dummy data`);
+		onPremInstallationDirectory = 'etc/onprem-installation-data';
+	}
+	if (!fs.existsSync(onPremInstallationDirectory)) {
+		console.log(`installation directory ${onPremInstallationDirectory} does not exist. done trying`);
 		process.exit(1);
 	}
 	if (onPremInstallationDirectory === '/opt/config') {
@@ -77,6 +83,6 @@ module.exports = async function(logger) {
 		release,
 		installationBranch
 	};
-	console.log("installaionData", installationData);
+	logger.log("installaionData", installationData);
 	return installationData;
 };
