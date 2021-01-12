@@ -10,10 +10,16 @@ class EmailSender {
 	constructor (options) {
 		Object.assign(this, options);
 		if (this.outboundEmailServer.config.emailDeliveryService.selected === 'NodeMailer') {
-			this.smtpMailer = new SMTPEmail(this.outboundEmailServer.config.emailDeliveryService.NodeMailer);
+			this.smtpMailer = new SMTPEmail({
+				...this.outboundEmailServer.config.emailDeliveryService.NodeMailer,
+				emailTo: this.outboundEmailServer.config.email.emailTo
+			});
 		}
 		else {
-			this.sendgridEmail = new SendGridEmail(this.outboundEmailServer.config.emailDeliveryService.sendgrid);
+			this.sendgridEmail = new SendGridEmail({
+				...this.outboundEmailServer.config.emailDeliveryService.sendgrid,
+				emailTo: this.outboundEmailServer.config.email.emailTo
+			});
 
 			// set address to divert all emails to, for developer testing
 			const { emailTo } = this.outboundEmailServer.config.email;
