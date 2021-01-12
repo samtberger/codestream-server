@@ -20,13 +20,6 @@ class EmailSender {
 				...this.outboundEmailServer.config.emailDeliveryService.sendgrid,
 				emailTo: this.outboundEmailServer.config.email.emailTo
 			});
-
-			// set address to divert all emails to, for developer testing
-			const { emailTo } = this.outboundEmailServer.config.email;
-			if (emailTo) {
-				this.outboundEmailServer.log('Will divert all SendGrid emails to ' + emailTo)
-				this.sendgridEmail.divertTo(emailTo);
-			}
 		}
 	}
 
