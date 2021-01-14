@@ -1,7 +1,9 @@
 'use strict';
 
 import express from 'express';
-import { Logger, MongoStructuredConfig, SystemStatusMonitor } from '../config/globalData';
+import passport from 'passport';
+import { Logger, MongoStructuredConfig, AdminConfig, SystemStatusMonitor, MongoClient } from '../config/globalData';
+import adminAccess from '../lib/adminAccess';
 
 const ApiRouter = express.Router();
 
@@ -28,11 +30,29 @@ ApiRouter.put('/config/activate/:serialNumber', (req, res) => {
 	})();
 });
 
+ApiRouter.get('/no-auth/status', (req, res) => {
+	res.send('OK');
+});
+
 // fetch a configuration by serial number
 ApiRouter.get('/config/:serialNumber', (req, res) => {
 	(async function () {
 		Logger.log(`api(get):/config/${req.params.serialNumber}`);
-		const config = await MongoStructuredConfig.getConfigBySerial(req.params.serialNumber, {includeMetaData: true});
+		let config;
+		if (req.params.serialNumber === 'active') {
+			// provide the config and related data that would have been present
+			// in the initial state had the user been authorized when making the
+			// initial request
+			config = {
+				configData: AdminConfig.getNativeConfig(),
+				activeConfigSerialNumber: MongoStructuredConfig.getConfigMetaDocument().serialNumber,
+				codeSchemaVersion: AdminConfig.getSchemaVersion(), // schemaVersion of the code base
+				runningRevision: AdminConfig.getConfigType() === 'mongo' ? AdminConfig.getConfigMetaDocument().revision : null, // config rev of running server (null for file)
+			};
+		}
+		else {
+			config = await MongoStructuredConfig.getConfigBySerial(req.params.serialNumber, { includeMetaData: true });
+		}
 		if (config) {
 			res.send(config);
 		} else {
@@ -86,6 +106,66 @@ ApiRouter.post('/config/:activate?', (req, res) => {
 ApiRouter.get('/status/history', (req, res) => {
 	Logger.log(`api(get):/status/history`);
 	res.send(SystemStatusMonitor.statusHistory);
+});
+
+// FIXME: we need the password to get encrypted (or hashed) on the client so
+// we never send an unenrypted password over http.
+ApiRouter.post('/no-auth/login', (req, res, next) => {
+	Logger.log('/no-auth/login', req.body);
+	passport.authenticate('local', (err, user, info) => {
+		Logger.log('Inside passport.authenticate() callback - BEFORE login()');
+		Logger.log(`req.session.passport: ${JSON.stringify(req.session.passport)}`);
+		// Logger.log(`req.user: ${JSON.stringify(req.user)}`);
+		Logger.log('req.user:', req.user);
+		if (info) {
+			// we failed to auth with a reason (bad user or pass)
+			Logger.log(`passport.auth failed. info`, info);
+			return res.send(info.message);
+		}
+		if (err) {
+			// propogate an error condition down the line
+			return next(err);
+		}
+		if (!user) {
+			// posted a form w/o a user ??  when could this happen??
+			Logger.log('NOT user - redirecting to /login');
+			return res.send({ loggedIn: false });
+		}
+		// passport.authenticate() added login() func to the req object
+		req.login(user, (err) => {
+			// login() serializes the user id to the session store and inside the
+			// req obj. It also adds the user obj to our req obj as req.user.
+			// Logger.log(`req.session.passport: ${JSON.stringify(req.session.passport)}`);
+			// Logger.log(`req.user: ${JSON.stringify(req.user)}`);
+			if (err) {
+				return next(err);
+			}
+			Logger.log('req.login() we are authenticated');
+			return res.send({ loggedIn: true });
+		})
+	})(req, res, next);
+});
+
+ApiRouter.post('/no-auth/register', async (req, res) => {
+	Logger.log('/no-auth/register', req.body.email);
+	if (req.body.id !== 'root' || !req.body.email || !req.body.password) {
+		res.status(400).send({success: false, message: 'bad data sent' })
+	}
+	const AdminAccess = new adminAccess(MongoClient, { logger: Logger });
+	try {
+		if (!await AdminAccess.store(req.body)) {
+			const msg = `attempt to register ${req.body.email} store method failed`;
+			Logger.error(msg);
+			res.status(400).send({ success: false, message: msg });
+		}
+	}
+	catch (error) {
+		const msg = `attempt to register ${req.body.email} failed with ${error}`;
+		Logger.error(msg);
+		res.status(400).send({success: false, message: msg });
+	}
+	Logger.log(`user ${req.body.id} with email ${req.body.email} registered successfully`);
+	res.redirect(307, '/api/no-auth/login');
 });
 
 export default ApiRouter;
