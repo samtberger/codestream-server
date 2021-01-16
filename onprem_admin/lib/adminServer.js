@@ -117,7 +117,7 @@ export default async function () {
 	// object is attached to the request object as req.user
 	passport.deserializeUser(async (id, done) => {
 		// find and proceed with the user object found by using the key (id)
-		Logger.log(`inside passport.deserializeUser(). The key stored in the session file is id=${id}`);
+		// Logger.log(`inside passport.deserializeUser(). The key stored in the session file is id=${id}`);
 		try {
 			const user = await AdminAccess.retrieve({ id });
 			done(null, user || false);

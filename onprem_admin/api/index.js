@@ -8,26 +8,20 @@ import adminAccess from '../lib/adminAccess';
 const ApiRouter = express.Router();
 
 // list of config meta docs
-ApiRouter.get('/config/summary/:schemaVersion?', (req, res) => {
-	(async function() {
-		Logger.log(`api(get):/config/summary/${req.params.schemaVersion})`);
-		const configSummary = await MongoStructuredConfig.getConfigSummary({schemaVersion: req.params.schemaVersion});
-		res.send(configSummary);
-	})();
+ApiRouter.get('/config/summary/:schemaVersion?', async (req, res) => {
+	Logger.log(`api(get):/config/summary/${req.params.schemaVersion})`);
+	res.send(await MongoStructuredConfig.getConfigSummary({schemaVersion: req.params.schemaVersion}));
 });
 
 // activate a configuration by serial number
-ApiRouter.put('/config/activate/:serialNumber', (req, res) => {
-	(async function() {
-		Logger.log(`api(put):/config/activate/${req.params.serialNumber})`);
-		const result = await MongoStructuredConfig.activateMongoConfig(req.params.serialNumber);
-		if (result) {
-			res.send('true');
-		}
-		else {
-			res.status(400).send('false');
-		}
-	})();
+ApiRouter.put('/config/activate/:serialNumber', async (req, res) => {
+	Logger.log(`api(put):/config/activate/${req.params.serialNumber})`);
+	if (await MongoStructuredConfig.activateMongoConfig(req.params.serialNumber)) {
+		res.send('true');
+	}
+	else {
+		res.status(400).send('false');
+	}
 });
 
 ApiRouter.get('/no-auth/status', (req, res) => {
@@ -35,72 +29,61 @@ ApiRouter.get('/no-auth/status', (req, res) => {
 });
 
 // fetch a configuration by serial number
-ApiRouter.get('/config/:serialNumber', (req, res) => {
-	(async function () {
-		Logger.log(`api(get):/config/${req.params.serialNumber}`);
-		let config;
-		if (req.params.serialNumber === 'active') {
-			// provide the config and related data that would have been present
-			// in the initial state had the user been authorized when making the
-			// initial request
-			config = {
-				configData: AdminConfig.getNativeConfig(),
-				activeConfigSerialNumber: MongoStructuredConfig.getConfigMetaDocument().serialNumber,
-				codeSchemaVersion: AdminConfig.getSchemaVersion(), // schemaVersion of the code base
-				runningRevision: AdminConfig.getConfigType() === 'mongo' ? AdminConfig.getConfigMetaDocument().revision : null, // config rev of running server (null for file)
-			};
-		}
-		else {
-			config = await MongoStructuredConfig.getConfigBySerial(req.params.serialNumber, { includeMetaData: true });
-		}
-		if (config) {
-			res.send(config);
-		} else {
-			res.status(404).send('false');
-		}
-	})();
+ApiRouter.get('/config/:serialNumber', async (req, res) => {
+	Logger.log(`api(get):/config/${req.params.serialNumber}`);
+	let config;
+	if (req.params.serialNumber === 'active') {
+		// provide the config and related data that would have been present
+		// in the initial state had the user been authorized when making the
+		// initial request
+		config = {
+			configData: AdminConfig.getNativeConfig(),
+			activeConfigSerialNumber: MongoStructuredConfig.getConfigMetaDocument().serialNumber,
+			codeSchemaVersion: AdminConfig.getSchemaVersion(), // schemaVersion of the code base
+			runningRevision: AdminConfig.getConfigType() === 'mongo' ? AdminConfig.getConfigMetaDocument().revision : null, // config rev of running server (null for file)
+		};
+	}
+	else {
+		config = await MongoStructuredConfig.getConfigBySerial(req.params.serialNumber, { includeMetaData: true });
+	}
+	if (config) {
+		res.send(config);
+	} else {
+		res.status(404).send('false');
+	}
 });
 
 // delete configuration by serial number
-ApiRouter.delete('/config/:serialNumber', (req, res) => {
-	(async function() {
-		Logger.log(`api(delete):/config/${req.params.serialNumber}`);
-		const result = await MongoStructuredConfig.deleteConfigFromMongo(req.params.serialNumber);
-		if (result) {
-			res.send('true');
-		}
-		else {
-			res.status(404).send('false');
-		}
-	})();
+ApiRouter.delete('/config/:serialNumber', async (req, res) => {
+	Logger.log(`api(delete):/config/${req.params.serialNumber}`);
+	if (await MongoStructuredConfig.deleteConfigFromMongo(req.params.serialNumber)) {
+		res.send('true');
+	}
+	else {
+		res.status(404).send('false');
+	}
 });
 
 // add a new config to the database and optionally activate it (set to '1' or 'true')
 // FIXME: is it necessary to validate the body before writing to mongo??
-ApiRouter.post('/config/:activate?', (req, res) => {
-	(async function() {
-		Logger.log(`api(post):/config/${req.params.activate}`);
-		const activate = req.params.activate in ['1', 'true', 'activate'];
-		const configDoc = await MongoStructuredConfig.addNewConfigToMongo(
-			req.body.configData,
-			{ desc: req.body.desc }
-		);
-		if (!configDoc) {
-			Logger.error(`Add new config failed`, req.body);
-			res.status(404).send({success: false, reason: "Failed to add config to database"});
+ApiRouter.post('/config/:activate?', async (req, res) => {
+	Logger.log(`api(post):/config/${req.params.activate}`);
+	const activate = req.params.activate in ['1', 'true', 'activate'];
+	const configDoc = await MongoStructuredConfig.addNewConfigToMongo(req.body.configData, { desc: req.body.desc });
+	if (!configDoc) {
+		Logger.error(`Add new config failed`, req.body);
+		res.status(404).send({success: false, reason: "Failed to add config to database"});
+		return;
+	}
+	Logger.log(`added new config ${configDoc.serialNumber}`);
+	if (activate) {
+		if (!await MongoStructuredConfig.activateMongoConfig(configDoc.serialNumber)) {
+			res.status(404).send({success: false, reason: `Failed to activate config ${serialNumber}`});
 			return;
 		}
-		Logger.log(`added new config ${configDoc.serialNumber}`);
-		if (activate) {
-			const result = await MongoStructuredConfig.activateMongoConfig(configDoc.serialNumber);
-			if (!result) {
-				res.status(404).send({success: false, reason: `Failed to activate config ${serialNumber}`});
-				return;
-			}
-			Logger.log(`activated cibfug ${configDoc.serialNumber}`);
-		}
-		res.send({success: true, response: { configDoc }});
-	})();
+		Logger.log(`activated cibfug ${configDoc.serialNumber}`);
+	}
+	res.send({success: true, response: { configDoc }});
 });
 
 ApiRouter.get('/status/history', (req, res) => {
