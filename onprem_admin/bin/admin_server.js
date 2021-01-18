@@ -69,7 +69,7 @@ import GlobalData from '../config/globalData';
 	startSocketIOServer(io);
 
 	// this creates and starts the status monitor service
-	GlobalData.SystemStatusMonitor = systemStatusFactory({ logger: GlobalData.Logger, io });
+	GlobalData.SystemStatusMonitor = systemStatusFactory(Config, GlobalData.Installation, { logger: GlobalData.Logger, io });
 	// console.log('admin-server(GlobalData)', GlobalData);
 
 	// Make the socketIO accessible inside express middleware and the AdminServer itself
