@@ -23,6 +23,7 @@ class StructuredConfigMongo extends StructuredConfigBase {
 		super({ ...options, configType: 'mongo' });
 		this.configCollection = options.mongoCfgCollection || 'structuredConfiguration'; // collection containing configs
 		this.selectedCollection = `${this.configCollection}Selected`; // contains one document which points to the selected config
+		this.customSchemaMigrationMatrix = options.customSchemaMigrationMatrix;
 	}
 
 	async initialize(initOptions = {}) {
@@ -65,6 +66,26 @@ class StructuredConfigMongo extends StructuredConfigBase {
 		return this.mongoClient;
 	}
 
+	// nativeCfg will be modified by this process
+	migrateNativeConfig(nativeCfg, curVer, targetVer) {
+		let migrationVer = curVer
+		let newConfig = Object.assign({}, nativeCfg);
+		this.customSchemaMigrationMatrix.forEach(([from, to, migrationFunc]) => {
+			if (migrationVer < targetVer && migrationVer === from) {
+				this.logger.log(`migrating config from schema ${from} to schema ${to}`)
+				let c = migrationFunc(newConfig, from, to, this.logger );
+				if (c) {
+					newConfig = c;
+				}
+				migrationVer = to;
+			}
+			else {
+				migrationVer++;
+			}
+		});
+		return newConfig;
+	}
+
 	// load configuration data from mongo
 	async _loadConfig() {
 		let activeConfig = await this.db.collection(this.selectedCollection).findOne();
@@ -77,7 +98,7 @@ class StructuredConfigMongo extends StructuredConfigBase {
 		try {
 			let configDoc;
 			if (activeConfig) {
-				this.logger.debug(`attempting to load config with serialNumber = ${activeConfig.serialNumber}`);
+				this.logger.debug(`attempting to load active config with serialNumber = ${activeConfig.serialNumber}`);
 				configDoc = await this.db.collection(this.configCollection).findOne({ _id: new ObjectID(activeConfig.serialNumber) });
 				if (!configDoc) {
 					this.logger.error(`active config ${activeConfig.serialNumber} not found`);
@@ -86,11 +107,20 @@ class StructuredConfigMongo extends StructuredConfigBase {
 			}
 			if (!configDoc) {
 				const schemaVersion = this.schemaVersion || this._defaultSchemaVersion();
-				this.logger.debug(`attempting to load latest config for schema ${schemaVersion}`);
+				this.logger.warn(`attempting to load latest config for schema ${schemaVersion}`);
 				configDoc = (await this.db.collection(this.configCollection).find({ schemaVersion }).sort({ timeStamp: -1 }).limit(1).toArray())[0];
 				if (!configDoc) {
-					this.logger.error('PANIC! No configuration found');
-					return;
+					if (this.customSchemaMigrationMatrix) {
+						this.logger.warn(`attempting a config migration to schema ${schemaVersion}`);
+						// find latest config for latest schema
+						// migrate config
+						// save new config and activate it
+						// proceed
+					}
+					else {
+						this.logger.error('PANIC! No configuration found and no migration func exists');
+						return;
+					}
 				}
 			}
 			this.logger.log(`config serial ${ObjectID(configDoc._id).toString()} (${new Date(configDoc.timeStamp).toUTCString()}) loaded`);
